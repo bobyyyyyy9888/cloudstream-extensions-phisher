@@ -2,7 +2,6 @@ package com.phisher98
 
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.lagradost.api.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addActors
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
@@ -17,7 +16,7 @@ import java.net.URI
 
 open class Movierulzhd : MainAPI() {
 
-    override var mainUrl = "https://1movierulzhd.fit"
+    override var mainUrl = "https://1movierulzhd.art"
     var directUrl = ""
     override var name = "Movierulzhd"
     override val hasMainPage = true
@@ -35,6 +34,9 @@ open class Movierulzhd : MainAPI() {
         "genre/netflix" to "Netflix",
         "genre/amazon-prime" to "Amazon Prime",
         "genre/Zee5" to "Zee5",
+        "genre/sony-liv" to "Sony Liv",
+        "genre/hotstar" to "Hotstar",
+        "genre/jio-cinema" to "Jio Cinema",
         "seasons" to "Season",
         "episodes" to "Episode",
     )
@@ -123,7 +125,7 @@ open class Movierulzhd : MainAPI() {
         val tvType = if (document.select("ul#section > li:nth-child(1)").text()
                 .contains("Episodes") || document.select("ul#playeroptionsul li span.title")
                 .text().contains(
-                    Regex("Episode\\s+\\d+|EP\\d+|PE\\d+")
+                    Regex("Episode\\s+\\d+|EP\\d+|PE\\d+|S\\d{2}|E\\d{2}")
                 )
         ) TvType.TvSeries else TvType.Movie
         val description = document.select("div.wp-content > p").text().trim()
@@ -230,57 +232,73 @@ open class Movierulzhd : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        Log.d("Phisher repolink",data)
-        if (data.startsWith("{")) {
-            val loadData = AppUtils.tryParseJson<LinkData>(data)
-            val source = app.post(
-                url = "$directUrl/wp-admin/admin-ajax.php",
-                data = mapOf(
-                    "action" to "doo_player_ajax",
-                    "post" to "${loadData?.post}",
-                    "nume" to "${loadData?.nume}",
-                    "type" to "${loadData?.type}"
-                ),
-                referer = data,
-                headers = mapOf("X-Requested-With" to "XMLHttpRequest")
-            ).parsed<ResponseHash>().embed_url
-            Log.d("Phisher repolink", source)
-            if (!source.contains("youtube")) loadCustomExtractor(
-                source,
-                "$directUrl/",
-                subtitleCallback,
-                callback
-            )
-        } else {
-            val document = app.get(data).document
-            document.select("ul#playeroptionsul > li").map {
+        try {
+            if (data.startsWith("{")) {
+                val loadData = AppUtils.tryParseJson<LinkData>(data)
+                if (loadData != null) {
+                    try {
+                        val source = app.post(
+                            url = "$directUrl/wp-admin/admin-ajax.php",
+                            data = mapOf(
+                                "action" to "doo_player_ajax",
+                                "post" to "${loadData.post}",
+                                "nume" to "${loadData.nume}",
+                                "type" to "${loadData.type}"
+                            ),
+                            referer = data,
+                            headers = mapOf("X-Requested-With" to "XMLHttpRequest")
+                        ).parsed<ResponseHash>().embed_url
+
+                        if (!source.contains("youtube")) {
+                            loadCustomExtractor(name,source, "$directUrl/", subtitleCallback, callback)
+                        }
+                    } catch (e: Exception) {
+                        println("Error loading direct source: ${e.message}")
+                    }
+                }
+            } else {
+                try {
+                    val document = app.get(data).document
+                    val items = document.select("ul#playeroptionsul > li").map {
                         Triple(
                             it.attr("data-post"),
                             it.attr("data-nume"),
                             it.attr("data-type")
                         )
-                    }.amap { (id, nume, type) ->
-                val source = app.post(
-                    url = "$directUrl/wp-admin/admin-ajax.php",
-                    data = mapOf(
-                        "action" to "doo_player_ajax",
-                        "post" to id,
-                        "nume" to nume,
-                        "type" to type
-                    ),
-                    referer = data, headers = mapOf("X-Requested-With" to "XMLHttpRequest")
-                ).parsed<ResponseHash>().embed_url
-                when {
-                    !source.contains("youtube") -> {
-                        loadExtractor(source, subtitleCallback, callback)
                     }
 
-                    else -> return@amap
+                    items.amap { (post, nume, type) ->
+                        try {
+                            val source = app.post(
+                                url = "$directUrl/wp-admin/admin-ajax.php",
+                                data = mapOf(
+                                    "action" to "doo_player_ajax",
+                                    "post" to post,
+                                    "nume" to nume,
+                                    "type" to type
+                                ),
+                                referer = data,
+                                headers = mapOf("X-Requested-With" to "XMLHttpRequest")
+                            ).parsed<ResponseHash>().embed_url
+
+                            if (!source.contains("youtube")) {
+                                loadExtractor(source, subtitleCallback, callback)
+                            }
+                        } catch (e: Exception) {
+                            println("Error loading item: ${e.message}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    println("Error processing HTML document: ${e.message}")
                 }
             }
+            return true
+        } catch (e: Exception) {
+            println("General error in loadLinks: ${e.message}")
+            return false
         }
-        return true
     }
+
 
     private fun Element.getImageAttr(): String {
         return when {
@@ -290,7 +308,9 @@ open class Movierulzhd : MainAPI() {
             else -> this.attr("abs:src")
         }
     }
+
     private suspend fun loadCustomExtractor(
+        name: String? = null,
         url: String,
         referer: String? = null,
         subtitleCallback: (SubtitleFile) -> Unit,
@@ -299,24 +319,23 @@ open class Movierulzhd : MainAPI() {
     ) {
         loadExtractor(url, referer, subtitleCallback) { link ->
             CoroutineScope(Dispatchers.IO).launch {
-                if (link.quality == Qualities.Unknown.value) {
-                    callback.invoke(
-                        newExtractorLink(
-                            link.source,
-                            link.name,
-                            url = link.url,
-                            ExtractorLinkType.M3U8
-                        ) {
-                            this.referer = link.referer
-                            this.quality = when (link.type) {
-                                ExtractorLinkType.M3U8 -> link.quality
-                                else -> quality ?: link.quality
-                            }
-                            this.headers = link.headers
-                            this.extractorData = link.extractorData
+                callback.invoke(
+                    newExtractorLink(
+                        name ?: link.source,
+                        name ?: link.name,
+                        link.url,
+                    ) {
+                        this.quality = when {
+                            link.name == "VidSrc" -> Qualities.P1080.value
+                            link.type == ExtractorLinkType.M3U8 -> link.quality
+                            else -> quality ?: link.quality
                         }
-                    )
-                }
+                        this.type = link.type
+                        this.referer = link.referer
+                        this.headers = link.headers
+                        this.extractorData = link.extractorData
+                    }
+                )
             }
         }
     }

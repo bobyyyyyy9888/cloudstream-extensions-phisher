@@ -37,16 +37,3 @@ val app = Requests(responseParser = JSONParser).apply {
     defaultHeaders = mapOf("User-Agent" to USER_AGENT)
 }
 
-inline fun <reified T : Any> parseJson(text: String): T {
-    return JSONParser.parse(text, T::class)
-}
-
-inline fun <reified T : Any> tryParseJson(text: String): T? {
-    return try {
-        return JSONParser.parseSafe(text, T::class)
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
-    }
-}
-

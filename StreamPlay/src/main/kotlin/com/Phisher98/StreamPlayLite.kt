@@ -29,7 +29,10 @@ import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.runAllAsync
 import com.lagradost.cloudstream3.utils.AppUtils
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.phisher98.StreamPlayExtractor.invokeDramadrip
 import com.phisher98.StreamPlayExtractor.invokeElevenmovies
+import com.phisher98.StreamPlayExtractor.invokeTom
+import com.phisher98.StreamPlayExtractor.invokeVidfast
 import com.phisher98.StreamPlayExtractor.invokeXPrimeAPI
 import com.phisher98.StreamPlayExtractor.invokevidzeeMulti
 import com.phisher98.StreamPlayExtractor.invokevidzeeUltra
@@ -276,8 +279,12 @@ class StreamPlayLite() : StreamPlay(sharedPref) {
                     callback
                 )
             },
-
-
+            {
+                if (!res.isAnime) invokeDramadrip(res.imdbId, res.season, res.episode, subtitleCallback, callback)
+            },
+            {
+                if (!res.isAnime) invokeVidfast(res.imdbId, res.season, res.episode, callback)
+            },
 
             //Subtitles Invokes
             {

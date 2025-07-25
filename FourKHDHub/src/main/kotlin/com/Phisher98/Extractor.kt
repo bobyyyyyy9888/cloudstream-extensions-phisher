@@ -1,5 +1,6 @@
 package com.Phisher98
 
+import android.annotation.SuppressLint
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.amap
@@ -18,6 +19,7 @@ class Hubdrive : ExtractorApi() {
     override val mainUrl = "https://hubdrive.fit"
     override val requiresReferer = false
 
+    @SuppressLint("SuspiciousIndentation")
     override suspend fun getUrl(
         url: String,
         referer: String?,
@@ -59,12 +61,22 @@ class HubCloud : ExtractorApi() {
             return
         }
 
-        val href = if ("hubcloud.php" in realUrl) {
-            realUrl
-        } else {
-            val scriptData = app.get(realUrl).document
-                .selectFirst("script:containsData(url)")?.toString().orEmpty()
-            Regex("var url = '([^']*)'").find(scriptData)?.groupValues?.getOrNull(1).orEmpty()
+        val baseUrl=getBaseUrl(realUrl)
+
+        val href = try {
+            if ("hubcloud.php" in realUrl) {
+                realUrl
+            } else {
+                val rawHref = app.get(realUrl).document.select("#download").attr("href")
+                if (rawHref.startsWith("http", ignoreCase = true)) {
+                    rawHref
+                } else {
+                    baseUrl.trimEnd('/') + "/" + rawHref.trimStart('/')
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("HubCloud", "Failed to extract href: ${e.message}")
+            ""
         }
 
         if (href.isBlank()) {

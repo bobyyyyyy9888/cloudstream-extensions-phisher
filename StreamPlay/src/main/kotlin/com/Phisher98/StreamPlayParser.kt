@@ -321,11 +321,18 @@ data class AniMedia(
     @JsonProperty("idMal") var idMal: Int? = null
 )
 
-data class AniPage(@JsonProperty("media") var media: java.util.ArrayList<AniMedia> = arrayListOf())
+data class AniPage(
+    @JsonProperty("media") var media: ArrayList<AniMedia> = arrayListOf()
+)
 
-data class AniData(@JsonProperty("Page") var Page: AniPage? = AniPage())
+data class AniData(
+    @JsonProperty("Page") var Page: AniPage? = null,
+    @JsonProperty("media") var media: ArrayList<AniMedia>? = null
+)
 
-data class AniSearch(@JsonProperty("data") var data: AniData? = AniData())
+data class AniSearch(
+    @JsonProperty("data") var data: AniData? = null
+)
 
 data class GpressSources(
     @JsonProperty("src") val src: String,
@@ -844,27 +851,86 @@ data class EMovieTraks(
     @JsonProperty("label") val label: String? = null,
 )
 
-data class ShowflixResultsMovies(
-    @JsonProperty("movieName") val movieName: String? = null,
-    @JsonProperty("streamwish") val streamwish: String? = null,
-    @JsonProperty("filelions") val filelions: String? = null,
-    @JsonProperty("streamruby") val streamruby: String? = null,
-)
-
-data class ShowflixResultsSeries(
-    @JsonProperty("seriesName") val seriesName: String? = null,
-    @JsonProperty("streamwish") val streamwish: HashMap<String, List<String>>? = hashMapOf(),
-    @JsonProperty("filelions") val filelions: HashMap<String, List<String>>? = hashMapOf(),
-    @JsonProperty("streamruby") val streamruby: HashMap<String, List<String>>? = hashMapOf(),
-)
-
 data class ShowflixSearchMovies(
-    @JsonProperty("results") val resultsMovies: ArrayList<ShowflixResultsMovies>? = arrayListOf(),
+    @JsonProperty("results")
+    val resultsMovies: ArrayList<ShowflixResultsMovies>? = arrayListOf()
+)
+
+data class ShowflixResultsMovies(
+    @JsonProperty("objectId")
+    val objectId: String? = null,
+    @JsonProperty("name")
+    val name: String? = null,
+    @JsonProperty("releaseYear")
+    val releaseYear: Int? = null,
+    @JsonProperty("tmdbId")
+    val tmdbId: Int? = null,
+    @JsonProperty("embedLinks")
+    val embedLinks: Map<String, String>? = null,
+    @JsonProperty("languages")
+    val languages: List<String>? = null,
+    @JsonProperty("genres")
+    val genres: List<String>? = null,
+    @JsonProperty("backdropURL")
+    val backdropURL: String? = null,
+    @JsonProperty("posterURL")
+    val posterURL: String? = null,
+    @JsonProperty("hdLink")
+    val hdLink: String? = null,
+    @JsonProperty("hubCloudLink")
+    val hubCloudLink: String? = null,
+    @JsonProperty("storyline")
+    val storyline: String? = null,
+    @JsonProperty("rating")
+    val rating: String? = null,
+    @JsonProperty("createdAt")
+    val createdAt: String? = null,
+    @JsonProperty("updatedAt")
+    val updatedAt: String? = null
 )
 
 data class ShowflixSearchSeries(
-    @JsonProperty("results") val resultsSeries: ArrayList<ShowflixResultsSeries>? = arrayListOf(),
+    @JsonProperty("results")
+    val resultsSeries: ArrayList<ShowflixResultsSeries>? = arrayListOf()
 )
+
+data class ShowflixResultsSeries(
+    @JsonProperty("objectId")
+    val objectId: String? = null,
+    @JsonProperty("seriesName")
+    val seriesName: String? = null,
+    @JsonProperty("releaseYear")
+    val releaseYear: Int? = null,
+    @JsonProperty("tmdbId")
+    val tmdbId: Int? = null,
+    @JsonProperty("streamwish")
+    val streamwish: Map<String, List<String>>? = null,
+    @JsonProperty("filelions")
+    val filelions: Map<String, List<String>>? = null,
+    @JsonProperty("streamruby")
+    val streamruby: Map<String, List<String>>? = null,
+    @JsonProperty("languages")
+    val languages: List<String>? = null,
+    @JsonProperty("genres")
+    val genres: List<String>? = null,
+    @JsonProperty("backdropURL")
+    val backdropURL: String? = null,
+    @JsonProperty("posterURL")
+    val posterURL: String? = null,
+    @JsonProperty("hdLink")
+    val hdLink: String? = null,
+    @JsonProperty("hubCloudLink")
+    val hubCloudLink: String? = null,
+    @JsonProperty("storyline")
+    val storyline: String? = null,
+    @JsonProperty("rating")
+    val rating: String? = null,
+    @JsonProperty("createdAt")
+    val createdAt: String? = null,
+    @JsonProperty("updatedAt")
+    val updatedAt: String? = null
+)
+
 
 data class SFMoviesSeriess(
     @JsonProperty("title") var title: String? = null,
@@ -1854,8 +1920,6 @@ data class Headers(
 data class AnichiVideoApiResponse(@JsonProperty("links") val links: List<AnichiLinks>)
 
 
-typealias ElevenmoviesServer = List<ElevenmoviesServerEntry>
-
 data class ElevenmoviesServerEntry(
     val name: String,
     val description: String,
@@ -1876,21 +1940,14 @@ data class ElevenmoviesSubtitle(
 data class Elevenmoviesjson(
     val src: String,
     val dst: String,
-    @JsonProperty("static_path")
-    val staticPath: String,
-    @JsonProperty("http_method")
-    val httpMethod: String,
-    @JsonProperty("key_hex")
-    val keyHex: String,
-    @JsonProperty("iv_hex")
-    val ivHex: String,
-    @JsonProperty("xor_key")
-    val xorKey: String,
-    @JsonProperty("csrf_token")
-    val csrfToken: String,
-    @JsonProperty("content_types")
-    val contentTypes: String,
+    val static_path: String,
+    val http_method: String,
+    val key_hex: String,
+    val iv_hex: String,
+    val xor_key: String,
+    val content_types: String,
 )
+
 
 
 //Domains Parser
@@ -1914,6 +1971,7 @@ data class DomainsParser(
     val luxmovies: String,
     val xprime: String,
     val extramovies:String,
+    val dramadrip:String
 )
 
 
@@ -2010,3 +2068,129 @@ data class Beamup(
 data class BeamupMeta(
     val name: String?
 )
+
+// CinemetaRes
+
+data class CinemetaRes(
+    val meta: CinemetaResMeta,
+)
+
+data class CinemetaResMeta(
+    @JsonProperty("imdb_id")
+    val imdbId: String,
+    val name: String,
+    val popularities: CinemetaResPopularities,
+    val type: String,
+    val cast: List<String>,
+    val country: String,
+    val description: String,
+    val genre: List<String>,
+    val imdbRating: String,
+    val released: String,
+    val slug: String,
+    val writer: List<String>,
+    val year: String,
+    val runtime: String,
+    val status: String,
+    @JsonProperty("tvdb_id")
+    val tvdbId: Long,
+    @JsonProperty("moviedb_id")
+    val moviedbId: Long,
+    val poster: String,
+    val trailers: List<CinemetaResTrailer>,
+    val director: List<Any?>,
+    val background: String,
+    val logo: String,
+    val awards: String,
+    val popularity: Double,
+    val id: String,
+    val genres: List<String>,
+    val releaseInfo: String,
+    val videos: List<CinemetaResVideo>,
+    val trailerStreams: List<CinemetaResTrailerStream>,
+    val links: List<CinemetaResLink>,
+    val behaviorHints: CinemetaResBehaviorHints,
+)
+
+data class CinemetaResPopularities(
+    val trakt: Long,
+    val moviedb: Double,
+    val stremio: Double,
+    @JsonProperty("stremio_lib")
+    val stremioLib: Long,
+)
+
+data class CinemetaResTrailer(
+    val source: String,
+    val type: String,
+)
+
+data class CinemetaResVideo(
+    val name: String,
+    val season: Int,
+    val number: Int,
+    val firstAired: String?,
+    @JsonProperty("tvdb_id")
+    val tvdbId: Long,
+    val rating: Double,
+    val overview: String,
+    val thumbnail: String,
+    val id: String,
+    val released: String?,
+    val episode: Long,
+    val description: String?,
+)
+
+data class CinemetaResTrailerStream(
+    val title: String,
+    val ytId: String,
+)
+
+data class CinemetaResLink(
+    val name: String,
+    val category: String,
+    val url: String,
+)
+
+data class CinemetaResBehaviorHints(
+    val defaultVideoId: Any?,
+    val hasScheduledVideos: Boolean,
+)
+
+
+data class VidfastServerData(
+    val name: String,
+    val description: String,
+    val image: String,
+    val data: String?
+)
+
+
+//VidFast Keys
+
+
+data class VidFastkey(
+    @JsonProperty("static_path")
+    val staticPath: String,
+    @JsonProperty("key_hex")
+    val keyHex: String,
+    @JsonProperty("iv_hex")
+    val ivHex: String,
+    @JsonProperty("xor_key")
+    val xorKey: String,
+    val method: String,
+    @JsonProperty("content_type")
+    val contentType: String,
+    val headers: Headers,
+    @JsonProperty("sub_path")
+    val subPath: String,
+    val apisubpath: String,
+)
+
+data class VidFastkeyHeaders(
+    @JsonProperty("Content-Type")
+    val contentType: String,
+    @JsonProperty("X-Requested-With")
+    val xRequestedWith: String,
+)
+

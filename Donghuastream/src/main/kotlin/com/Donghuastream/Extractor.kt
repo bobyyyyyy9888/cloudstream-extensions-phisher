@@ -145,7 +145,6 @@ class Rumble : ExtractorApi() {
                     this.quality = getQualityFromName("")
                 }
             )
-
         }
     }
 }
@@ -161,19 +160,31 @@ open class PlayStreamplay : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val doc = app.get(url).document
+        val doc = app.get(url, timeout = 10000).document
         val packedScript = doc.selectFirst("script:containsData(function(p,a,c,k,e,d))")?.data() ?: return
         val evalRegex = Regex("""eval\(.*?\)\)\)""", RegexOption.DOT_MATCHES_ALL)
         val packedCode = evalRegex.find(packedScript)?.value ?: return
         val unpackedJs = JsUnpacker(packedCode).unpack() ?: return
         val token = Regex("""kaken="(.*?)"""").find(unpackedJs)?.groupValues?.getOrNull(1) ?: return
         val apiUrl = "$mainUrl/api/?$token"
-        val response = app.get(apiUrl).parsedSafe<Response>() ?: return
+        val response = app.get(apiUrl, timeout = 10000).parsedSafe<Response>() ?: return
 
-        val m3u8Url = response.sources.firstOrNull()?.file
+        val m3u8Url = response.sources.find { it.file.isNotBlank() }?.file
         if (!m3u8Url.isNullOrEmpty()) {
-            M3u8Helper.generateM3u8(name, m3u8Url, referer = "$mainUrl/")
-                .forEach(callback)
+            val headers = mapOf(
+                "pragma" to "no-cache",
+                "priority" to "u=0, i",
+                "sec-ch-ua" to "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+                "sec-ch-ua-mobile" to "?0",
+                "sec-ch-ua-platform" to "\"Windows\"",
+                "sec-fetch-dest" to "document",
+                "sec-fetch-mode" to "navigate",
+                "sec-fetch-site" to "none",
+                "sec-fetch-user" to "?1",
+                "upgrade-insecure-requests" to "1",
+                "user-agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            )
+            M3u8Helper.generateM3u8(name, m3u8Url, mainUrl, headers = headers).forEach(callback)
         }
 
         response.tracks.forEach { subtitle ->
@@ -219,5 +230,6 @@ open class PlayStreamplay : ExtractorApi() {
         val label: String,
         val default: Boolean?,
     )
+
 }
 

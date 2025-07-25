@@ -14,6 +14,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import kotlinx.coroutines.delay
 import kotlin.text.Regex
 
 class OwlExtractor : ExtractorApi() {
@@ -27,97 +28,132 @@ class OwlExtractor : ExtractorApi() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ) {
-        val document = app.get(url).document
-        val dataSrc = document.selectFirst("button#hot-anime-tab")?.attr("data-source")
-            ?: throw Exception("Missing data-source attribute")
+        val response = retryIO { app.get(url).document }
+        val datasrc = response.select("button#hot-anime-tab").attr("data-source")
+        val id = datasrc.substringAfterLast("/")
 
-        val id = dataSrc.substringAfterLast("/")
-        val jsUrl = "$referer/players/$id.v2.js"
-
-        val epJS = Deobfuscator.deobfuscateScript(app.get(jsUrl).text)
-            ?: throw Exception("Failed to deobfuscate player JS")
-
-        val jwt = findFirstJwt(epJS) ?: throw Exception("Unable to find JWT token")
-
-        val jsonUrl = "$referer$dataSrc"
-        val jsonString = app.get(jsonUrl).text
-
-        val gson = Gson()
-        val type = object : TypeToken<Map<String, List<VideoData>>>() {}.type
-        val servers: Map<String, List<VideoData>> = gson.fromJson(jsonString, type)
-        val sources = mutableListOf<Pair<String, String>>()
-
-
-        // Kaido (single source)
-        servers["kaido"]?.firstOrNull()?.url?.let {
-            sources += "Kaido" to "$it$jwt"
-        }
-
-        // Luffy (multiple resolutions)
-        servers["luffy"]?.forEach { video ->
-            val finalUrl = "${video.url}$jwt"
-            val redirectedUrl = getRedirectedUrl(finalUrl)
-            Log.d("OwlExtractor", "Luffy ${video.resolution}: $redirectedUrl")
-            sources += "Luffy-${video.resolution}" to redirectedUrl
-        }
-
-        // Zoro (may include subtitle)
-        servers["zoro"]?.firstOrNull()?.url?.let {
-            val finalUrl = "$it$jwt"
-            val zoroJson = getZoroJson(finalUrl)
-            fetchZoroUrl(zoroJson)?.let { (m3u8, subtitleUrl) ->
-                sources += "Zoro" to m3u8
-                sources += "Zoro-subtitle" to subtitleUrl
+        val epJS = retryIO {
+            app.get("$referer/players/$id.v2.js").text.let {
+                Deobfuscator.deobfuscateScript(it)
             }
         }
 
-        // Emit results
-        sources.amap { (key, sourceUrl) ->
-            if (sourceUrl.endsWith(".vtt") || sourceUrl.endsWith(".vvt")) {
-                subtitleCallback(SubtitleFile("English", sourceUrl))
+        val jwt = findFirstJwt(epJS ?: throw Exception("Unable to get jwt")) ?: return
+
+        val jsonString = retryIO { app.get("$referer$datasrc").text }
+        val mapper = jacksonObjectMapper()
+        val root = mapper.readTree(jsonString)
+
+        val servers = mutableMapOf<String, List<VideoData>>()
+        listOf("luffy", "kaido", "zoro").forEach { key ->
+            val node = root[key]
+            if (node != null && node.isArray) {
+                val videos: List<VideoData> = mapper.readValue(node.toString())
+                servers[key] = videos
+            }
+        }
+
+        val subtitlesNode = root["subtitles"]
+        subtitlesNode?.forEach {
+            val language = it["language"]?.asText()
+            val subUrl = it["url"]?.asText()
+            if (!language.isNullOrEmpty() && !subUrl.isNullOrEmpty()) {
+                subtitleCallback.invoke(SubtitleFile(language, subUrl))
+            }
+        }
+
+        val sources = mutableListOf<Pair<String, String>>()
+
+        servers["kaido"]?.firstOrNull()?.url?.let {
+            val finalUrl = "$it$jwt"
+            sources += "Kaido" to finalUrl
+        }
+
+        servers["luffy"]?.forEach { video ->
+            val finalUrl = "${video.url}$jwt"
+            val m3u8 = retryIO { getRedirectedUrl(finalUrl) }
+            sources += "Luffy-${video.resolution}" to m3u8
+        }
+
+        servers["zoro"]?.firstOrNull()?.url?.let {
+            val finalUrl = "$it$jwt"
+            val jsonResponse = retryIO { getZoroJson(finalUrl) }
+            val (m3u8, vtt) = fetchZoroUrl(jsonResponse) ?: return
+            sources += "Zoro" to m3u8
+            sources += "Zoro" to vtt
+        }
+
+        sources.amap { (key, finalUrl) ->
+            if (finalUrl.endsWith(".vtt") || finalUrl.endsWith(".ass")) {
+                subtitleCallback.invoke(SubtitleFile("English", finalUrl))
             } else {
                 callback(
                     newExtractorLink(
+                        "AnimeOwl",
                         "AnimeOwl $key",
-                        "AnimeOwl $key",
-                        url = sourceUrl,
-                        INFER_TYPE
+                        url = finalUrl,
+                        type = INFER_TYPE
                     ) {
                         this.referer = mainUrl
-                        this.quality = Qualities.Unknown.value
-
+                        this.quality = when {
+                            key.contains("480") -> Qualities.P480.value
+                            key.contains("720") -> Qualities.P720.value
+                            key.contains("1080") -> Qualities.P1080.value
+                            key.contains("1440") -> Qualities.P1440.value
+                            key.contains("2160") -> Qualities.P2160.value
+                            key.contains("default") -> Qualities.P1080.value
+                            key.contains("2K") -> Qualities.P1440.value
+                            else -> Qualities.P720.value
+                        }
                     }
                 )
             }
         }
     }
-}
 
-private fun findFirstJwt(text: String): String? {
-    val jwtPattern = Regex("['\"]([A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+)['\"]")
-    return jwtPattern.find(text)?.groupValues?.get(1)
-}
-
-fun getRedirectedUrl(url: String): String = url
-
-data class ZoroResponse(val url: String, val subtitle: String)
-
-suspend fun getZoroJson(url: String): String = app.get(url).text
-
-fun fetchZoroUrl(jsonResponse: String): Pair<String, String>? {
-    return try {
-        jacksonObjectMapper().readValue<ZoroResponse>(jsonResponse).let {
-            it.url to it.subtitle
-        }
-    } catch (e: Exception) {
-        Log.e("OwlExtractor", "Zoro JSON parsing failed: ${e.message}")
-        null
+    private fun findFirstJwt(text: String): String? {
+        val jwtPattern = Regex("['\"]([A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+)['\"]")
+        return jwtPattern.find(text)?.groupValues?.get(1)
     }
+
+    private fun getRedirectedUrl(url: String): String {
+        return url // Can wrap with retryIO if logic is added
+    }
+
+    private suspend fun getZoroJson(url: String): String {
+        return app.get(url).text
+    }
+
+    private fun fetchZoroUrl(jsonResponse: String): Pair<String, String>? {
+        return try {
+            val response = jacksonObjectMapper().readValue<ZoroResponse>(jsonResponse)
+            response.url to response.subtitle
+        } catch (e: Exception) {
+            Log.e("Error:", "Error parsing Zoro JSON: ${e.message}")
+            null
+        }
+    }
+
+    data class VideoData(val resolution: String, val url: String)
+
+    data class ZoroResponse(val url: String, val subtitle: String)
+
 }
 
-
-
-data class VideoData(val resolution: String, val url: String)
+suspend fun <T> retryIO(
+    times: Int = 3,
+    delayTime: Long = 1000,
+    block: suspend () -> T
+): T {
+    repeat(times - 1) {
+        try {
+            return block()
+        } catch (e: Exception) {
+            delay(delayTime)
+        }
+    }
+    return block() // last attempt, let it throw
+}
 
 
 //Searchresponse

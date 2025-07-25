@@ -167,6 +167,7 @@ class MPlayer : MainAPI() {
 
 
 
+    @Suppress("LABEL_NAME_CLASH")
     override suspend fun load(url: String): LoadResponse? {
         val gson = Gson()
         val video: LoadUrl? = try {
@@ -182,43 +183,92 @@ class MPlayer : MainAPI() {
         val title = video.title
         val poster = getMovieBigPic(url) ?: video.titleContentImageInfo ?: video.alternativeposter
         val type = if (video.tvType.contains("tvshow", true)) TvType.TvSeries else TvType.Movie
-        val href = video.stream?.hls?.high ?: video.stream?.thirdParty?.hlsUrl ?:video.stream?.hls?.base?: video.stream?.thirdParty?.hlsUrl ?: video.stream?.thirdParty?.dashUrl ?:video.alternativestream
+        Log.d("Phisher Video",video.stream.toString())
+        val hrefList = listOfNotNull(
+            video.stream?.hls?.high,
+            video.stream?.hls?.base,
+            video.stream?.hls?.main,
+            video.stream?.dash?.high,
+            video.stream?.dash?.base,
+            video.stream?.dash?.main,
+
+            video.stream?.mxplay?.hls?.high,
+            video.stream?.mxplay?.hls?.base,
+            video.stream?.mxplay?.hls?.main,
+            video.stream?.mxplay?.dash?.high,
+            video.stream?.mxplay?.dash?.base,
+            video.stream?.mxplay?.dash?.main,
+
+            // alternative or fallback
+            video.stream?.thirdParty?.hlsUrl,
+            video.stream?.thirdParty?.dashUrl,
+            video.alternativestream
+        ).map { it }.distinct()
         return if (type == TvType.TvSeries) {
             val epposter = getMovieBigPic(url)
             val seasonData = getSeasonData("$mainUrl${video.shareUrl}")
             val episodes = mutableListOf<Episode>()
-            seasonData.forEach { (season, id) ->
-                val apiUrl = "$webApi/detail/tab/tvshowepisodes?type=season&id=$id"
-                val jsonResponse = app.get(apiUrl).toString()
 
-                val episodesParser = try {
-                    gson.fromJson(jsonResponse, EpisodesParser::class.java)
-                } catch (e: Exception) {
-                    Log.e("Error", "Failed to parse episodes JSON: ${e.message}")
-                    null
-                }
+            seasonData.forEach { (season, seasonId) ->
+                var episodeNumber = 1
+                var page = 1
+                var nextQuery: String? = null
 
-                episodesParser?.items?.forEachIndexed { index, it ->
-                    val href1 = endpointurl + it.stream.hls.high
-                    val name = it.title ?: "Unknown Title"
-                    val image = imageUrl + it.imageInfo.map { img -> img.url }.firstOrNull()
-                    val episode = index + 1
-                    episodes += newEpisode(href1)
-                    {
-                        this.name=name
-                        this.season=season+1
-                        this.episode=episode
-                        this.posterUrl=image
+                do {
+                    val apiUrl = if (nextQuery == null) {
+                        "$webApi/detail/tab/tvshowepisodes?type=season&id=$seasonId"
+                    } else {
+                        "$webApi/detail/tab/tvshowepisodes?type=season&$nextQuery&id=$seasonId&sortOrder=0&device-density=2&userid=debug-user-id&platform=com.mxplay.desktop&content-languages=hi,en&kids-mode-enabled=false"
                     }
-                }
+                    val jsonResponse = app.get(apiUrl).text
+
+                    val episodesParser = try {
+                        gson.fromJson(jsonResponse, EpisodesParser::class.java)
+                    } catch (e: Exception) {
+                        Log.e("Error M Player:", "Failed to parse JSON on page $page: ${e.message}")
+                        break
+                    }
+                    episodesParser?.items?.forEach { it ->
+
+                        val streamUrls = listOfNotNull(
+                            it.stream.hls.high,
+                            it.stream.hls.base,
+                            it.stream.hls.main,
+                            it.stream.dash.high,
+                            it.stream.dash.base,
+                            it.stream.dash.main,
+                            it.stream.mxplay.hls.high,
+                            it.stream.mxplay.hls.base,
+                            it.stream.mxplay.hls.main,
+                            it.stream.mxplay.dash.high,
+                            it.stream.mxplay.dash.base,
+                            it.stream.mxplay.dash.main
+                        ).distinct()
+                        if (streamUrls.isEmpty()) return@forEach
+                        val name = it.title ?: "Unknown Title"
+                        val image = imageUrl + it.imageInfo.firstOrNull()?.url
+                        episodes += newEpisode(streamUrls) {
+                            this.name = name
+                            this.season = season
+                            this.episode = episodeNumber
+                            this.posterUrl = image
+                        }
+                        episodeNumber++
+                    }
+
+                    nextQuery = episodesParser?.next
+                    page++
+                } while (nextQuery != null)
             }
+
             newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
                 posterUrl = epposter ?: video.alternativeposter
                 backgroundPosterUrl = epposter
                 plot = video.description
             }
-        } else {
-            newMovieLoadResponse(title, url, TvType.Movie, href) {
+        }
+        else {
+            newMovieLoadResponse(title, url, TvType.Movie, hrefList) {
                 posterUrl = poster.toString()
                 backgroundPosterUrl = poster.toString()
                 plot = video.description
@@ -232,34 +282,35 @@ class MPlayer : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        if (data.startsWith("video")) {
-            val href = endpointurl + data
+        val urls = if (data.trim().startsWith("[")) {
+            val gson=Gson()
+            try {
+                gson.fromJson(data, Array<String>::class.java)?.toList().orEmpty()
+            } catch (e: Exception) {
+                Log.e("Error M Player:", "Failed to parse stream URL list: ${e.message}")
+                listOf(data) // fallback to single link
+            }
+        } else listOf(data)
+        urls.forEach { url ->
+            val label = if (url.contains(".m3u8")) "HLS"
+            else if (url.contains(".mpd")) "DASH (Doesn't Work in CS)"
+            else ""
+            val fullUrl = if (url.startsWith("video")) endpointurl + url else url
             callback.invoke(
                 newExtractorLink(
-                    this.name,
-                    name,
-                    url = href,
-                    INFER_TYPE
-                ) {
-                    this.referer = "$mainUrl/"
-                    this.quality = Qualities.Unknown.value
-                }
-            )
-        } else {
-            callback.invoke(
-                newExtractorLink(
-                    this.name,
-                    name,
-                    url = data,
-                    INFER_TYPE
+                    label,
+                    "${this.name} $label",
+                    url = fullUrl,
+                    type = INFER_TYPE
                 ) {
                     this.referer = "$mainUrl/"
                     this.quality = Qualities.Unknown.value
                 }
             )
         }
+
         return true
-    }}
+    }
 
 private suspend fun getSeasonData(url: String): List<Pair<Int, String>> {
     val document = app.get(url).document
@@ -301,3 +352,4 @@ data class LoadUrl(
     val alternativestream: String? = null,
     val alternativeposter: String? = null
 )
+}

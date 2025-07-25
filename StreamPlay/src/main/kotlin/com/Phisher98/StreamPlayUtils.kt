@@ -979,11 +979,14 @@ fun getEpisodeSlug(
     season: Int? = null,
     episode: Int? = null,
 ): Pair<String, String> {
-    return if (season == null && episode == null) {
+    val result = if (season == null && episode == null) {
         "" to ""
     } else {
-        (if (season!! < 10) "0$season" else "$season") to (if (episode!! < 10) "0$episode" else "$episode")
+        val seasonSlug = if (season!! < 10) "0$season" else "$season"
+        val episodeSlug = if (episode!! < 10) "0$episode" else "$episode"
+        seasonSlug to episodeSlug
     }
+    return result
 }
 
 fun getTitleSlug(title: String? = null): Pair<String?, String?> {
@@ -1744,9 +1747,22 @@ fun CatxorDecrypt(binary: String, key: String): String {
     return decrypted.toString()
 }
 
-fun CatdecryptHexWithKey(hex: String, key: String): String {
-    val binary = CathexToBinary(hex)
-    return CatxorDecrypt(binary, key)
+
+fun extractcatflixValue(text: String, key: String): String? {
+    val regex = Regex("""$key\s*=\s*['"](.*?)['"]""")
+    return regex.find(text)?.groupValues?.getOrNull(1)
+}
+
+fun catdecryptHexWithKey(hex: String, key: String): String {
+    val cipherBytes = hex.chunked(2)
+        .map { it.toInt(16).toByte() }
+        .toByteArray()
+    val keyBytes = base64DecodeArray(key)
+
+    val decryptedChars = cipherBytes.mapIndexed { i, byte ->
+        (byte.toInt() xor keyBytes[i % keyBytes.size].toInt()).toChar()
+    }
+    return decryptedChars.joinToString("")
 }
 
 fun getfullURL(url: String, mainUrl: String): String {
@@ -2056,7 +2072,7 @@ suspend fun invokeExternalSource(
 
                 callback.invoke(
                     ExtractorLink(
-                        "⌜ SuperStream ⌟ ${source.size}",
+                        "⌜ SuperStream ⌟",
                         "⌜ SuperStream ⌟ [Server ${index + 1}] ${source.size}",
                         source.file?.replace("\\/", "/") ?: return@org,
                         "",
@@ -2862,9 +2878,8 @@ suspend fun <T> retryIO(
 @SuppressLint("NewApi")
 suspend fun elevenMoviesTokenV2(rawData: String): String {
     val json= app.get("https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/output.json").parsedSafe<Elevenmoviesjson>() ?: return ""
-    val keyHex = json.keyHex
-    val ivHex = json.ivHex
-
+    val keyHex = json.key_hex
+    val ivHex = json.iv_hex
     val aesKey = keyHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     val aesIv = ivHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
@@ -2878,7 +2893,7 @@ suspend fun elevenMoviesTokenV2(rawData: String): String {
     val hexString = encrypted.joinToString("") { "%02x".format(it) }
 
     // XOR key from hex string
-    val xorKeyHex = json.xorKey
+    val xorKeyHex = json.xor_key
     val xorKey = xorKeyHex.chunked(2)
         .map { it.toInt(16).toByte() }
         .toByteArray()
@@ -2906,7 +2921,6 @@ suspend fun elevenMoviesTokenV2(rawData: String): String {
 }
 
 
-@RequiresApi(Build.VERSION_CODES.O)
 suspend fun hdhubgetRedirectLinks(url: String): String {
     val doc = app.get(url).toString()
     val regex = "s\\('o','([A-Za-z0-9+/=]+)'|ck\\('_wp_http_\\d+','([^']+)'".toRegex()
@@ -2934,10 +2948,10 @@ suspend fun hdhubgetRedirectLinks(url: String): String {
 }
 
 
-@RequiresApi(Build.VERSION_CODES.O)
-fun hdhubencode(value: String): String {
-    return Base64.getEncoder().encodeToString(value.toByteArray())
+fun hdhubencode(encoded: String): String {
+    return String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
 }
+
 
 fun hdhubpen(value: String): String {
     return value.map {
@@ -2961,4 +2975,20 @@ suspend fun dispatchToExtractor(
         link.contains("hubcdn", ignoreCase = true) -> HUBCDN().getUrl(link, source, subtitleCallback, callback)
         else -> loadSourceNameExtractor(source, link, "", subtitleCallback, callback)
     }
+}
+
+
+fun customBase64EncodeVidfast(input: ByteArray): String {
+    val sourceChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+    val targetChars = "7EkRi2WnMSlgLbXm_jy1vtO69ehrAV0-saUB5FGpoq3QuNIZ8wJ4PfdHxzTDKYCc"
+
+    // Standard Base64 URL-safe encode, no padding or wrap
+    val base64 = android.util.Base64.encodeToString(
+        input,
+        android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP
+    )
+
+    // Translate characters to custom charset
+    val translationMap = sourceChars.zip(targetChars).toMap()
+    return base64.map { translationMap[it] ?: it }.joinToString("")
 }

@@ -1,6 +1,7 @@
 package com.phisher98.settings
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
@@ -11,24 +12,26 @@ import android.webkit.*
 import android.widget.Button
 import android.widget.EditText
 import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AlertDialog
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.phisher98.BuildConfig
-import com.phisher98.SuperStreamPlugin
 import com.lagradost.cloudstream3.CommonActivity.showToast
+import com.lagradost.cloudstream3.utils.AppContextUtils.setDefaultFocus
+import com.phisher98.SuperStreamPlugin
 
 class SettingsFragment(
-    private val plugin: SuperStreamPlugin,
+    plugin: SuperStreamPlugin,
     private val sharedPref: SharedPreferences,
 ) : BottomSheetDialogFragment() {
     private val res = plugin.resources ?: throw Exception("Unable to read resources")
 
-    @SuppressLint("DiscouragedApi")
     private fun <T : View> View.findView(name: String): T {
         val id = res.getIdentifier(name, "id", BuildConfig.LIBRARY_PACKAGE_NAME)
         return this.findViewById(id)
     }
 
-    @SuppressLint("DiscouragedApi")
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?,
@@ -38,7 +41,17 @@ class SettingsFragment(
         return inflater.inflate(layout, container, false)
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    override fun onStart() {
+        super.onStart()
+        (dialog as? BottomSheetDialog)?.behavior?.apply {
+            state = BottomSheetBehavior.STATE_EXPANDED
+            skipCollapsed = true
+            isDraggable = false // optional: prevent dragging at all
+        }
+    }
+
+
+    @SuppressLint("SetJavaScriptEnabled", "SetTextI18n")
     @RequiresApi(Build.VERSION_CODES.M)
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         val tokenInput = view.findView<EditText>("tokenInput")
@@ -46,7 +59,6 @@ class SettingsFragment(
         val resetButton = view.findView<Button>("resetButton")
         val loginButton = view.findView<Button>("loginButton")
         val webView = view.findView<WebView>("authWebView")
-
         val savedToken = sharedPref.getString("token", null)
         if (!savedToken.isNullOrEmpty()) {
             tokenInput.setText(savedToken)
@@ -60,17 +72,28 @@ class SettingsFragment(
         }
 
         addButton.setOnClickListener {
-            var token = tokenInput.text.toString().trim()
+            val token = tokenInput.text.toString().trim()
             if (token.isNotEmpty()) {
-                if (!token.startsWith("ui=")) {
-                    token = "ui=$token"
+                val finalToken = if (token.startsWith("ui=")) token else "ui=$token"
+
+                sharedPref.edit().putString("token", finalToken).apply()
+
+                val ctx = context ?: run {
+                    showToast("Error: Context is null")
+                    return@setOnClickListener
                 }
-                sharedPref.edit()?.apply {
-                    putString("token", token)
-                    apply()
-                }
-                showToast("Token saved successfully. Restart the app.")
-                dismiss()
+
+                AlertDialog.Builder(ctx)
+                    .setTitle("Save & Reload")
+                    .setMessage("Changes have been saved. Do you want to restart the app to apply them?")
+                    .setPositiveButton("Yes") { _, _ ->
+                        dismiss()
+                        restartApp()
+                    }
+                    .setNegativeButton("No") { _, _ ->
+                        dismiss()
+                    }
+                    .show()
             } else {
                 showToast("Please enter a valid token")
             }
@@ -98,6 +121,22 @@ class SettingsFragment(
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+
+                // Resize WebView to content height
+                view?.evaluateJavascript(
+                    "(function() { return document.body.scrollHeight; })();"
+                ) { value ->
+                    val height = value.replace("\"", "").toFloatOrNull()
+                    if (height != null) {
+                        val density = resources.displayMetrics.density
+                        val layoutParams = view.layoutParams
+                        layoutParams.height = (height * density).toInt()
+                        view.layoutParams = layoutParams
+                    }
+                }
+
+                // Existing token scraping logic
                 val cookieManager = CookieManager.getInstance()
                 val cookies = cookieManager.getCookie(url ?: "")
 
@@ -119,11 +158,25 @@ class SettingsFragment(
                             putString("token", finalToken)
                             apply()
                         }
+
                         showToast("Login successful!")
                         webView.visibility = View.GONE
                     }
                 }
             }
+        }
+    }
+
+    private fun restartApp() {
+        val context = requireContext().applicationContext
+        val packageManager = context.packageManager
+        val intent = packageManager.getLaunchIntentForPackage(context.packageName)
+        val componentName = intent?.component
+
+        if (componentName != null) {
+            val restartIntent = Intent.makeRestartActivityTask(componentName)
+            context.startActivity(restartIntent)
+            Runtime.getRuntime().exit(0)
         }
     }
 }

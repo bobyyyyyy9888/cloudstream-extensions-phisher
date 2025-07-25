@@ -6,7 +6,6 @@ import com.phisher98.StreamPlayExtractor.invoke2embed
 import com.phisher98.StreamPlayExtractor.invokeAllMovieland
 import com.phisher98.StreamPlayExtractor.invokeAnimes
 import com.phisher98.StreamPlayExtractor.invokeBollyflix
-import com.phisher98.StreamPlayExtractor.invokeBollyflixvip
 import com.phisher98.StreamPlayExtractor.invokeDahmerMovies
 import com.phisher98.StreamPlayExtractor.invokeDotmovies
 import com.phisher98.StreamPlayExtractor.invokeEmbedsu
@@ -15,7 +14,6 @@ import com.phisher98.StreamPlayExtractor.invokeExtramovies
 import com.phisher98.StreamPlayExtractor.invokeFilm1k
 import com.phisher98.StreamPlayExtractor.invokeFlixAPIHQ
 import com.phisher98.StreamPlayExtractor.invokeFlixon
-import com.phisher98.StreamPlayExtractor.invokeHindMoviez
 import com.phisher98.StreamPlayExtractor.invokeKisskh
 import com.phisher98.StreamPlayExtractor.invokeLing
 import com.phisher98.StreamPlayExtractor.invokeMoflix
@@ -50,6 +48,8 @@ import com.phisher98.StreamPlayExtractor.invokeZshow
 import com.phisher98.StreamPlayExtractor.invokeazseries
 import com.phisher98.StreamPlayExtractor.invokecatflix
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.lagradost.api.Log
 import com.lagradost.cloudstream3.Actor
 import com.lagradost.cloudstream3.ActorData
@@ -61,6 +61,7 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addImdbId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTMDbId
 import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
 import com.lagradost.cloudstream3.MainPageRequest
+import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.ShowStatus
 import com.lagradost.cloudstream3.SubtitleFile
@@ -81,11 +82,14 @@ import com.lagradost.cloudstream3.runAllAsync
 import com.lagradost.cloudstream3.toRatingInt
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.AppUtils.toJson
+import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.phisher98.StreamPlayExtractor.invoke4khdhub
 import com.phisher98.StreamPlayExtractor.invokeDramacool
 import com.phisher98.StreamPlayExtractor.invokeElevenmovies
 import com.phisher98.StreamPlayExtractor.invokeHdmovie2
+import com.phisher98.StreamPlayExtractor.invokeDramadrip
+import com.phisher98.StreamPlayExtractor.invokeVidfast
 import com.phisher98.StreamPlayExtractor.invokeXPrimeAPI
 import com.phisher98.StreamPlayExtractor.invokehdhub4u
 import com.phisher98.StreamPlayExtractor.invokevidzeeMulti
@@ -107,7 +111,7 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
         TvType.Cartoon,
     )
 
-    private val token = sharedPref?.getString("token", null)
+    val token = sharedPref?.getString("token", null)
     val wpRedisInterceptor by lazy { CloudflareKiller() }
 
     /** AUTHOR : hexated & Phisher & Code */
@@ -168,6 +172,7 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
         const val malsyncAPI = "https://api.malsync.moe"
         const val jikanAPI = "https://api.jikan.moe/v4"
         private const val apiKey = BuildConfig.TMDB_API
+        private const val Cinemeta = "https://v3-cinemeta.strem.io"
 
         /** ALL SOURCES */
         const val twoEmbedAPI = "https://www.2embed.cc"
@@ -204,14 +209,12 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
         const val zoechipAPI = "https://www1.zoechip.to"
         const val nepuAPI = "https://nepu.to"
         const val dahmerMoviesAPI = "https://a.111477.xyz"
-        const val bollyflixAPI = "https://bollyflix.yoga"
         const val animepaheAPI = "https://animepahe.ru"
         const val Catflix = "https://catflix.su"
         const val NyaaAPI = "https://nyaa.land"
         const val SubtitlesAPI = "https://opensubtitles-v3.strem.io"
         const val EmbedSu = "https://embed.su"
         const val WyZIESUBAPI = "https://sub.wyzie.ru"
-        const val Theyallsayflix = BuildConfig.Theyallsayflix
         const val TomAPI = "https://tom.autoembed.cc"
         const val RiveStreamAPI = "https://rivestream.org"
         const val VidSrcVip = "https://vidsrc.vip"
@@ -219,7 +222,6 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
         const val consumetFlixhqAPI = "https://consumet.8man.me/movies/flixhq"
         const val AnimeOwlAPI = "https://animeowl.me"
         const val Film1kApi = "https://www.film1k.com"
-        const val HindMoviezApi = "https://hindmoviez.co.in"
         const val thrirdAPI = BuildConfig.SUPERSTREAM_THIRD_API
         const val fourthAPI = BuildConfig.SUPERSTREAM_FOURTH_API
         const val KickassAPI = "https://kaa.mx"
@@ -230,6 +232,7 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
         const val Vidzee = "https://vidzee.wtf"
         const val Elevenmovies = "https://111movies.com"
         const val FlixHQ = "https://myflixerz.to"
+        const val Vidfast = "https://vidfast.pro"
         fun getType(t: String?): TvType {
             return when (t) {
                 "movie" -> TvType.Movie
@@ -316,6 +319,7 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
             TvType.Movie,
         ) {
             this.posterUrl = getImageUrl(posterPath)
+            this.score= Score.from10(voteAverage)
         }
     }
 
@@ -370,12 +374,6 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
         val recommendations =
             res.recommendations?.results?.mapNotNull { media -> media.toSearchResponse() }
 
-        /*
-        val trailer = res.videos?.results?.filter { it.type == "Trailer" }
-            ?.map { "https://www.youtube.com/watch?v=${it.key}" }?.reversed().orEmpty()
-            .ifEmpty { res.videos?.results?.map { "https://www.youtube.com/watch?v=${it.key}" } }
-
-         */
         val trailer = res.videos?.results.orEmpty()
             .filter { it.type == "Trailer" }
             .map { "https://www.youtube.com/watch?v=${it.key}" }
@@ -428,19 +426,65 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
                     }
             }?.flatten() ?: listOf()
             if (isAnime) {
+                val gson = Gson()
+                val animeType = if (data.type?.contains("tv", ignoreCase = true) == true) "series" else "movie"
+                val imdbId = res.external_ids?.imdb_id.orEmpty()
+                val cineJsonText = app.get("$Cinemeta/meta/$animeType/$imdbId.json").text
+                val cinejson = runCatching {
+                    gson.fromJson(cineJsonText, CinemetaRes::class.java)
+                }.getOrNull()
+                val animeepisodes = cinejson?.meta?.videos?.filter { it.season != 0 } ?.map { video ->
+                    newEpisode(
+                        LinkData(
+                            id = data.id,
+                            imdbId = res.external_ids?.imdb_id,
+                            tvdbId = res.external_ids?.tvdb_id,
+                            type = data.type,
+                            season = video.season,
+                            episode = video.number,
+                            epid = null,
+                            aniId = null,
+                            animeId = null,
+                            title = title,
+                            year = video.released?.split("-")?.firstOrNull()?.toIntOrNull(),
+                            orgTitle = orgTitle,
+                            isAnime = true,
+                            airedYear = year,
+                            lastSeason = null,
+                            epsTitle = video.name,
+                            jpTitle = res.alternative_titles?.results?.find { it.iso_3166_1 == "JP" }?.title,
+                            date = video.released,
+                            airedDate = res.releaseDate ?: res.firstAirDate,
+                            isAsian = isAsian,
+                            isBollywood = isBollywood,
+                            isCartoon = isCartoon,
+                            alttitle = res.title,
+                            nametitle = res.name
+                        ).toJson()
+                    ) {
+                        this.name = video.name + if (isUpcoming(video.released)) " • [UPCOMING]" else ""
+                        this.season = video.season
+                        this.episode = video.number
+                        this.posterUrl = video.thumbnail
+                        this.rating = video.rating.times(10).roundToInt()
+                        this.description = video.description
+                    }.apply {
+                        this.addDate(video.released)
+                    }
+                } ?: emptyList()
+
                 return newAnimeLoadResponse(title, url, TvType.Anime) {
-                    addEpisodes(DubStatus.Subbed, episodes)
+                    addEpisodes(DubStatus.Subbed, animeepisodes)
                     this.posterUrl = poster
                     this.backgroundPosterUrl = bgPoster
                     this.year = year
                     this.plot = res.overview
-                    this.tags = keywords?.map { word -> word.replaceFirstChar { it.titlecase() } }
+                    this.tags = keywords?.map { it.replaceFirstChar { it.titlecase() } }
                         ?.takeIf { it.isNotEmpty() } ?: genres
                     this.rating = rating
                     this.showStatus = getStatus(res.status)
                     this.recommendations = recommendations
                     this.actors = actors
-                    //this.contentRating = fetchContentRating(data.id, "US") ?: "Not Rated"
                     addTrailer(trailer)
                     addTMDbId(data.id.toString())
                     addImdbId(res.external_ids?.imdb_id)
@@ -458,7 +502,6 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
                     this.showStatus = getStatus(res.status)
                     this.recommendations = recommendations
                     this.actors = actors
-                    //this.contentRating = fetchContentRating(data.id, "US") ?: "Not Rated"
                     addTrailer(trailer)
                     addTMDbId(data.id.toString())
                     addImdbId(res.external_ids?.imdb_id)
@@ -582,19 +625,7 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
             },
             {
                 if (!res.isAnime) invokeBollyflix(
-                    res.imdbId, subtitleCallback, callback
-                )
-            },
-            {
-                if (!res.isAnime) invokeBollyflixvip(
-                    res.imdbId,
-                    res.title,
-                    res.year,
-                    res.season,
-                    res.lastSeason,
-                    res.episode,
-                    subtitleCallback,
-                    callback
+                    res.imdbId, res.season, res.episode,subtitleCallback, callback
                 )
             },
             {
@@ -669,7 +700,6 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
                     res.title,
                     res.year,
                     res.season,
-                    res.lastSeason,
                     res.episode,
                     subtitleCallback,
                     callback
@@ -681,7 +711,6 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
                     res.title,
                     res.year,
                     res.season,
-                    res.lastSeason,
                     res.episode,
                     subtitleCallback,
                     callback
@@ -757,10 +786,9 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
                 )
 
             },
-
             {
                 if (!res.isAnime) invokeVidSrcViP(
-                    res.id, res.season, res.episode, res.year, subtitleCallback, callback
+                    res.id, res.season, res.episode, callback
                 )
             },
             {
@@ -785,11 +813,6 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
                     res.year,
                     subtitleCallback,
                     callback
-                )
-            },
-            {
-                if (!res.isAnime) invokeHindMoviez(
-                    res.title, res.imdbId, res.season, res.episode, callback
                 )
             },
             {
@@ -850,7 +873,13 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
                 )
             },
             {
-                if (!res.isAnime) invokeHdmovie2(res.title, res.season, res.episode, subtitleCallback, callback)
+                if (!res.isAnime) invokeHdmovie2(res.title,res.year,res.season, res.episode, subtitleCallback, callback)
+            },
+            {
+                if (!res.isAnime) invokeDramadrip(res.imdbId, res.season, res.episode, subtitleCallback, callback)
+            },
+            {
+                if (!res.isAnime) invokeVidfast(res.imdbId, res.season, res.episode, callback)
             },
 
             //Subtitles Invokes
@@ -916,6 +945,7 @@ open class StreamPlay(val sharedPref: SharedPreferences? = null) : TmdbProvider(
         @JsonProperty("original_title") val originalTitle: String? = null,
         @JsonProperty("media_type") val mediaType: String? = null,
         @JsonProperty("poster_path") val posterPath: String? = null,
+        @JsonProperty("vote_average") val voteAverage: Double? = null,
     )
 
     data class Genres(

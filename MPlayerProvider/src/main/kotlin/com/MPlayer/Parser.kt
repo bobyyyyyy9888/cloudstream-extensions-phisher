@@ -3,6 +3,7 @@ package com.MPlayer
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
+
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class MXPlayer(
     val style: String,
@@ -31,13 +32,6 @@ data class Section(
     val features: Any?,
     val tournament: Any?,
     val ascend: Boolean,
-)
-
-data class SectionItem(
-    val description: String,
-    val title: String,
-    val releaseDate: String,
-    val stream: Stream?,
 )
 
 data class Item(
@@ -319,191 +313,6 @@ data class ImageInfo2(
 
 //Entity
 
-data class Entity(
-    val description: String,
-    val title: String,
-    val releaseDate: String,
-    val stream: MovieStream?,
-    val type: String,
-    val tvodPackImageInfo: Any?,
-    val tvodDetail: Any?,
-    val watchAt: Long,
-    val lastWatched: Boolean,
-    val lastWatchedEpisodeId: Any?,
-    val subtitleLanguageCode: Any?,
-    val audioTrackLanguageCode: Any?,
-    val statusCode: Long,
-    val lastTvShowEpisode: Boolean,
-    val rating: Long,
-    val descriptor: Any?,
-    val id: String,
-    val languages: List<String>,
-    val languagesDetails: List<EntityLanguagesDetail>,
-    val duration: Long,
-    val genres: List<String>,
-    val genresDetails: List<EntityGenresDetail>,
-    val secondaryGenres: List<String>,
-    val publishTime: Any?,
-    val shareUrl: String,
-    val image: EntityImage,
-    val imageInfo: List<EntityImageInfo>,
-    val titleContentImageInfo: List<EntityTitleContentImageInfo>,
-    val trailerPreview: Any?,
-    val trailer: Any?,
-    val container: Any?,
-    val contributors: List<Any?>,
-    val sequence: Long,
-    val subType: String,
-    val gifVideoUrl: Any?,
-    val gifVideoUrlInfo: Any?,
-    @JsonProperty("canPreviewGIFVideo")
-    val canPreviewGifvideo: Boolean,
-    val webUrl: String,
-    val isOptimizedDescription: Boolean,
-    val childCount: Long,
-    val videoCount: Long,
-    val detailKey: Any?,
-    val inlineData: Any?,
-    val statistics: Any?,
-    val viewCount: Long,
-    val overlayImages: Any?,
-    val tags: Any?,
-    val tabs: Any?,
-    val goldBadgeImageInfo: Any?,
-    @JsonProperty("existInCW")
-    val existInCw: Boolean,
-    )
-
-
-data class EntityGenresDetail(
-    val id: String,
-    val name: String,
-    val webUrl: String,
-)
-
-data class EntityImage(
-    @JsonProperty("16x9")
-    val n16x9: String,
-    @JsonProperty("2x3")
-    val n2x3: String,
-    @JsonProperty("1x1")
-    val n1x1: Any?,
-    @JsonProperty("18x14")
-    val n18x14: Any?,
-    @JsonProperty("40x13")
-    val n40x13: Any?,
-    @JsonProperty("9x16")
-    val n9x16: Any?,
-    @JsonProperty("13x15")
-    val n13x15: Any?,
-    @JsonProperty("2x1")
-    val n2x1: Any?,
-    @JsonProperty("9x19")
-    val n9x19: Any?,
-)
-
-data class EntityLanguagesDetail(
-    val id: String,
-    val name: String,
-    val webUrl: String,
-    @JsonProperty("three_char_language_id")
-    val threeCharLanguageId: String,
-)
-
-data class EntityImageInfo(
-    val density: String,
-    val width: Long,
-    val type: String,
-    val url: String,
-    val height: Long,
-    @JsonProperty("genre_ids")
-    val genreIds: Any?,
-)
-
-data class EntityTitleContentImageInfo(
-    val density: String,
-    val width: Long,
-    val type: String,
-    val url: String,
-    val height: Long,
-)
-
-
-data class Data(
-    val id: String,
-    val type: String,
-    val title: String,
-    @JsonProperty("page_type")
-    val pageType: String,
-    val category: Long,
-    @JsonProperty("meta_description")
-    val metaDescription: String,
-    val description: String,
-    val keywords: String,
-    val btf: Btf,
-    val atf: Atf,
-    val source: Source,
-    val redirect: Any?,
-    @JsonProperty("offline_redirect")
-    val offlineRedirect: Any?,
-    @JsonProperty("seo_optimized_description")
-    val seoOptimizedDescription: Boolean,
-    val deleted: Boolean,
-    @JsonProperty("page_languages")
-    val pageLanguages: List<String>,
-    val isValidForGoogleIndexing: Boolean,
-)
-
-data class Btf(
-    val text: List<Text>,
-    val links: List<Any?>,
-    val categorizedLinks: List<Any?>,
-)
-
-data class Text(
-    val heading: String,
-    val text: String,
-    @JsonProperty("_id")
-    val id: String,
-)
-
-data class Atf(
-    val links: List<Link>,
-)
-
-data class Link(
-    val title: String,
-    val url: String,
-    @JsonProperty("_id")
-    val id: String,
-)
-
-data class Source(
-    val livein: List<String>,
-    val status: Long,
-    val language: List<String>,
-    @JsonProperty("release_date")
-    val releaseDate: Long,
-    val directors: List<Any?>,
-    val actors: List<Actor>,
-    val genres: List<Genre>,
-    val countries: List<String>,
-    @JsonProperty("language_pack")
-    val description: String,
-    @JsonProperty("thumbnail_url")
-    val thumbnailUrl: String,
-    val title: String,
-)
-
-data class Actor(
-    val id: String,
-    val name: String,
-)
-
-data class Genre(
-    val id: String,
-    val name: String,
-)
 
 //EpisodesParser
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -511,7 +320,7 @@ data class EpisodesParser(
     val id: String,
     val style: String,
     val items: List<EpisodesItem>,
-    val next: String,
+    val next: String?,
     val previous: String,
     val name: String,
     val webUrl: Any?,
@@ -520,6 +329,7 @@ data class EpisodesParser(
     val tournament: Any?,
     val ascend: Boolean,
 )
+
 
 data class EpisodesItem(
     val description: String,
